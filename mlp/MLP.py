@@ -58,13 +58,17 @@ class MLP:
         self.hidden_weights -= self.learning_rate * np.dot(X.T, hidden_error)
         self.hidden_bias -= self.learning_rate * np.sum(hidden_error, axis=0)
         
-    def train(self, X, y, batch_size=32):
+    def train(self, X, y, batch_size=32, X_val=None, y_val=None):
         y_onehot = np.zeros((len(y), self.output_size))
         y_onehot[np.arange(len(y)), y] = 1
+        
+        if y_val is not None:
+            y_val_onehot = np.zeros((len(y_val), self.output_size))
+            y_val_onehot[np.arange(len(y_val)), y_val] = 1
 
         best_loss = float('inf')
         patience_counter = 0
-        self.history = {'loss': [], 'stopped_early': False, 'final_epoch': 0}
+        self.history = {'loss': [], 'val_loss': [], 'stopped_early': False, 'final_epoch': 0}
 
         for epoch in range(self.num_epochs):
             epoch_loss = 0
@@ -79,13 +83,25 @@ class MLP:
             epoch_loss /= len(X)
             self.history['loss'].append(epoch_loss)
             self.history['final_epoch'] = epoch + 1
+            
+            # Compute validation loss
+            val_loss = None
+            if X_val is not None:
+                val_output = self.forward(X_val)
+                val_loss = -np.sum(y_val_onehot * np.log(val_output + 1e-8)) / len(X_val)
+                self.history['val_loss'].append(val_loss)
 
             if self.verbose:
-                print(f"Epoch {epoch+1}/{self.num_epochs}, Loss: {epoch_loss:.4f}")
+                msg = f"Epoch {epoch+1}/{self.num_epochs}, Loss: {epoch_loss:.4f}"
+                if val_loss is not None:
+                    msg += f", Val Loss: {val_loss:.4f}"
+                print(msg)
 
+            # Early stopping based on validation loss (or train loss if no val data)
             if self.early_stopping:
-                if epoch_loss < best_loss - self.min_delta:
-                    best_loss = epoch_loss
+                monitor_loss = val_loss if val_loss is not None else epoch_loss
+                if monitor_loss < best_loss - self.min_delta:
+                    best_loss = monitor_loss
                     patience_counter = 0
                 else:
                     patience_counter += 1
